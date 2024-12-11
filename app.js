@@ -15,6 +15,9 @@ app.use(express.static(path.join(__dirname , "public"))); // setup static folder
 const server = http.createServer(app);
 const io = socketio(server);
 io.on("connection" , function(socket){
+    socket.on("send-location" , function(data){   // accept location from backend script.js
+        io.emit("receive-location" , { id:socket.id, ...data });    // send location to all connected users
+    })
     console.log("New user connected");
 })
 
