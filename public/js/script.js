@@ -1,29 +1,42 @@
-const socker = io(); //c onnection to the socket server
+const socker = io(); // Connection to the socket server
+let userLocations = {}; // Store user locations to draw the path
 
-if(navigator.geolocation){  //check if geolocation is available
+// Check if geolocation is available
+if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
-    (position) =>{
-        const latitude = position.coords.latitude;  //get latitude and longitude
-        const longitude = position.coords.longitude;
-        socker.emit("send-location", {latitude , longitude}); //send location to the server
-    }, 
-    (error) =>{
-        console.log(error);
-    },
-    {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0
-    }
-);
+        (position) => {
+            const latitude = position.coords.latitude; // Get latitude and longitude
+            const longitude = position.coords.longitude;
+
+            // Set the map view to the user's current location
+            if (typeof map !== 'undefined') {
+                map.setView([latitude, longitude], 16); // Set map to user's location
+            }
+
+            socker.emit("send-location", { latitude, longitude }); // Send location to the server
+        },
+        (error) => {
+            console.log(error);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        }
+    );
 }
-const map = L.map('map').setView([0,0], 16);
+
+// Initialize map (this will be updated to the user's location once it's retrieved)
+// Default to Bhopal coordinates if geolocation is not available
+const map = L.map('map').setView([23.233233, 77.430696], 16); // Default to Bhopal
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: "Meetup Point (R&S)"
 }).addTo(map);
 
-const markers = {};
+const markers = {}; // Store user markers
+const polylines = {}; // Store polylines to draw paths
 
+// Listen for location updates from other users
 socker.on("receive-location", (data) => {
     const { id, latitude, longitude } = data;
     userLocations[id] = { latitude, longitude };
@@ -35,12 +48,12 @@ socker.on("receive-location", (data) => {
         markers[id] = L.marker([latitude, longitude]).addTo(map);
     }
 
-    // If two users exist, draw a line between them and find the meeting point
-    const userIds = Object.keys(userLocations); // Get the user IDs
+    // If two users exist, draw a line between them
+    const userIds = Object.keys(userLocations);
     if (userIds.length === 2) {
-        const user1 = userLocations[userIds[0]]; // Get the locations of the two users
+        const user1 = userLocations[userIds[0]];
         const user2 = userLocations[userIds[1]];
-        const latLngs = [                           // Create the polyline coordinates
+        const latLngs = [
             [user1.latitude, user1.longitude],
             [user2.latitude, user2.longitude]
         ];
@@ -50,22 +63,13 @@ socker.on("receive-location", (data) => {
         } else {
             polylines[userIds.join("-")] = L.polyline(latLngs, { color: 'black' }).addTo(map); // Draw a new polyline
         }
-
-        // // Find and add the meeting point
-        // const meetingPoint = findClosestMeetingPoint(userLocations);
-        // if (meetingPoint) {
-        //     L.marker([meetingPoint.lat, meetingPoint.lon])
-        //         .addTo(map)
-        //         .bindPopup(meetingPoint.name)
-        //         .openPopup();
-        // }
     }
 });
 
-
-socker.on("user-disconnected" , (id)=>{  // delete user when app closes
-    if(markers[id]){
+// Handle user disconnections
+socker.on("user-disconnected", (id) => {
+    if (markers[id]) {
         map.removeLayer(markers[id]);
         delete markers[id];
     }
-})
+});
