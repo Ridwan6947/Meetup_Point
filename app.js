@@ -18,7 +18,9 @@ io.on("connection" , function(socket){
     socket.on("send-location" , function(data){   // accept location from backend script.js
         io.emit("receive-location" , { id:socket.id, ...data });    // send location to all connected users
     })
-    console.log("New user connected");
+    socket.on("disconnect" , function(){
+        io.emit("user-disconnected" , socket.id);
+    });
 })
 
 
