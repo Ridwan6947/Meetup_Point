@@ -20,7 +20,7 @@ if (navigator.geolocation) {
         },
         {
             enableHighAccuracy: true,
-            timeout: 20000,
+            timeout: 5000,
             maximumAge: 0
         }
     );
@@ -28,7 +28,7 @@ if (navigator.geolocation) {
 
 // Initialize map (this will be updated to the user's location once it's retrieved)
 // Default to Bhopal coordinates if geolocation is not available
-const map = L.map('map').setView([23.232702, 77.431198], 16); // Default to Bhopal
+const map = L.map('map').setView([23.2599, 77.4126], 16); // Default to Bhopal
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: "Meetup Point (R&S)"
 }).addTo(map);
@@ -39,6 +39,7 @@ const polylines = {}; // Store polylines to draw paths
 // Leaflet Routing Machine setup
 let routeControl = null; // Store route control for re-routing
 
+// Event listener when the server sends location data
 socker.on("receive-location", (data) => {
     const { id, latitude, longitude } = data;
     userLocations[id] = { latitude, longitude };
@@ -61,17 +62,20 @@ socker.on("receive-location", (data) => {
             map.removeControl(routeControl);
         }
 
-        // Calculate and display the route between the two users
-        routeControl = L.Routing.control({
-            waypoints: [
-                L.latLng(user1.latitude, user1.longitude),
-                L.latLng(user2.latitude, user2.longitude)
-            ],
-            routeWhileDragging: true, // Allow dragging to update route
-            lineOptions: {
-                styles: [{ color: 'black', weight: 4 }]
-            }
-        }).addTo(map);
+        // Ensure the map is fully initialized before adding the routing control
+        if (map.getZoom() !== null) {
+            // Calculate and display the route between the two users
+            routeControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(user1.latitude, user1.longitude),
+                    L.latLng(user2.latitude, user2.longitude)
+                ],
+                routeWhileDragging: true, // Allow dragging to update route
+                lineOptions: {
+                    styles: [{ color: 'black', weight: 4 }]
+                }
+            }).addTo(map);
+        }
     }
 });
 
@@ -80,5 +84,25 @@ socker.on("user-disconnected", (id) => {
     if (markers[id]) {
         map.removeLayer(markers[id]);
         delete markers[id];
+    }
+
+    // Recalculate the route if one user disconnects
+    const userIds = Object.keys(userLocations);
+    if (userIds.length === 2) {
+        const user1 = userLocations[userIds[0]];
+        const user2 = userLocations[userIds[1]];
+
+        if (routeControl) {
+            map.removeControl(routeControl);
+        }
+
+        routeControl = L.Routing.control({
+            waypoints: [
+                L.latLng(user1.latitude, user1.longitude),
+                L.latLng(user2.latitude, user2.longitude)
+            ],
+            routeWhileDragging: true,
+            lineOptions: { styles: [{ color: 'black', weight: 4 }] }
+        }).addTo(map);
     }
 });
