@@ -28,7 +28,7 @@ if (navigator.geolocation) {
 
 // Initialize map (this will be updated to the user's location once it's retrieved)
 // Default to Bhopal coordinates if geolocation is not available
-const map = L.map('map').setView([23.2599, 77.4126], 16); // Default to Bhopal
+const map = L.map('map').setView([23.232702, 77.431198], 16); // Default to Bhopal
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: "Meetup Point (R&S)"
 }).addTo(map);
