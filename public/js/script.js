@@ -28,7 +28,7 @@ if (navigator.geolocation) {
 
 // Initialize map (this will be updated to the user's location once it's retrieved)
 // Default to Bhopal coordinates if geolocation is not available
-const map = L.map('map').setView([23.233233, 77.430696], 16); // Default to Bhopal
+const map = L.map('map').setView([23.2599, 77.4126], 16); // Default to Bhopal
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: "Meetup Point (R&S)"
 }).addTo(map);
@@ -36,7 +36,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 const markers = {}; // Store user markers
 const polylines = {}; // Store polylines to draw paths
 
-// Listen for location updates from other users
+// Leaflet Routing Machine setup
+let routeControl = null; // Store route control for re-routing
+
 socker.on("receive-location", (data) => {
     const { id, latitude, longitude } = data;
     userLocations[id] = { latitude, longitude };
@@ -53,16 +55,23 @@ socker.on("receive-location", (data) => {
     if (userIds.length === 2) {
         const user1 = userLocations[userIds[0]];
         const user2 = userLocations[userIds[1]];
-        const latLngs = [
-            [user1.latitude, user1.longitude],
-            [user2.latitude, user2.longitude]
-        ];
 
-        if (polylines[userIds.join("-")]) {
-            polylines[userIds.join("-")].setLatLngs(latLngs); // Update the polyline
-        } else {
-            polylines[userIds.join("-")] = L.polyline(latLngs, { color: 'black' }).addTo(map); // Draw a new polyline
+        // Remove previous route if it exists
+        if (routeControl) {
+            map.removeControl(routeControl);
         }
+
+        // Calculate and display the route between the two users
+        routeControl = L.Routing.control({
+            waypoints: [
+                L.latLng(user1.latitude, user1.longitude),
+                L.latLng(user2.latitude, user2.longitude)
+            ],
+            routeWhileDragging: true, // Allow dragging to update route
+            lineOptions: {
+                styles: [{ color: 'black', weight: 4 }]
+            }
+        }).addTo(map);
     }
 });
 
