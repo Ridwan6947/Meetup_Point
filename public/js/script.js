@@ -17,9 +17,20 @@ if(navigator.geolocation){  //check if geolocation is available
     }
 );
 }
-const map = L.map('map').setView([0,0], 10);
+const map = L.map('map').setView([0,0], 18);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: "Meetup Point (R&S)"
 }).addTo(map);
 
 const markers = {};
+
+socker.on("receive-location" , (data)=>{
+    const {id , latitude , longitude} = data;
+    map.setView([latitude , longitude], 18);
+    if(markers[id]){
+        markers[id].setLatLng([latitude , longitude]);
+    }else{
+        markers[id] = L.marker([latitude , longitude]).addTo(map);
+    }
+    
+})
