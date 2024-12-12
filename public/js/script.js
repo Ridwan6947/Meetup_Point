@@ -37,44 +37,46 @@ const markers = {}; // Store user markers
 let routeControl = null; // Store route control for dynamic updates
 
 // Event listener when the server sends location data
-socker.on("receive-location", (data) => {
+socker.on("receive-location", async (data) => {
     const { id, latitude, longitude } = data;
     userLocations[id] = { latitude, longitude };
 
-    // Create or update the marker for the user
-    if (markers[id]) {
-        markers[id].setLatLng([latitude, longitude]);
-    } else {
-        markers[id] = L.marker([latitude, longitude]).addTo(map);
-    }
-
-    // If two users exist, update the route
     const userIds = Object.keys(userLocations);
     if (userIds.length === 2) {
         const user1 = userLocations[userIds[0]];
         const user2 = userLocations[userIds[1]];
 
-        // Initialize the route control if it doesn't exist
-        if (!routeControl) {
-            routeControl = L.Routing.control({
-                waypoints: [
-                    L.latLng(user1.latitude, user1.longitude),
-                    L.latLng(user2.latitude, user2.longitude)
-                ],
-                routeWhileDragging: false, // Disable dragging to stabilize routing
-                lineOptions: {
-                    styles: [{ color: 'black', weight: 4 }]
-                }
-            }).addTo(map);
-        } else {
-            // Update waypoints dynamically
-            routeControl.setWaypoints([
-                L.latLng(user1.latitude, user1.longitude),
-                L.latLng(user2.latitude, user2.longitude)
-            ]);
-        }
+        const middlePoint = {
+            latitude: (user1.latitude + user2.latitude) / 2,
+            longitude: (user1.longitude + user2.longitude) / 2
+        };
+
+        // Fetch nearby places from the server
+        const response = await fetch(
+            `/api/nearby?lat1=${user1.latitude}&lon1=${user1.longitude}&lat2=${user2.latitude}&lon2=${user2.longitude}`
+        );
+        const data = await response.json();
+
+        // Add markers for cafes and parks
+        data.cafes.forEach((place) => {
+            L.marker([place.lat, place.lon], { title: place.name })
+                .addTo(map)
+                .bindPopup(`Cafe: ${place.name}`);
+        });
+
+        data.parks.forEach((place) => {
+            L.marker([place.lat, place.lon], { title: place.name })
+                .addTo(map)
+                .bindPopup(`Park: ${place.name}`);
+        });
+
+        // Display the middle point
+        L.marker([middlePoint.latitude, middlePoint.longitude], { title: "Middle Point" })
+            .addTo(map)
+            .bindPopup("Middle Point");
     }
 });
+
 
 // Handle user disconnections
 socker.on("user-disconnected", (id) => {
