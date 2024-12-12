@@ -1,98 +1,108 @@
-const socket = io(); // connection to the socket server
+const socker = io(); // Connection to the socket server
 let userLocations = {}; // Store user locations to draw the path
-let userMarkers = {};
-let routePolyline;
 
-// Initialize map centered in Bhopal
-const map = L.map("map").setView([23.2599, 77.4126], 12);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "Meetup Point (R&S)"
-}).addTo(map);
-
-if (navigator.geolocation) {  
+// Check if geolocation is available
+if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
         (position) => {
-            const latitude = position.coords.latitude;  
+            const latitude = position.coords.latitude; // Get latitude and longitude
             const longitude = position.coords.longitude;
-            socket.emit("send-location", { latitude, longitude }); 
+
+            // Set the map view to the user's current location
+            if (typeof map !== 'undefined') {
+                map.setView([latitude, longitude], 16); // Set map to user's location
+            }
+
+            socker.emit("send-location", { latitude, longitude }); // Send location to the server
         },
-        (error) => console.log(error),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        (error) => {
+            console.log(error);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+        }
     );
 }
 
-socket.on("receive-location", (data) => {
+// Initialize map (this will be updated to the user's location once it's retrieved)
+// Default to Bhopal coordinates if geolocation is not available
+const map = L.map('map').setView([23.2599, 77.4126], 16); // Default to Bhopal
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: "Meetup Point (R&S)"
+}).addTo(map);
+
+const markers = {}; // Store user markers
+const polylines = {}; // Store polylines to draw paths
+
+// Leaflet Routing Machine setup
+let routeControl = null; // Store route control for re-routing
+
+// Event listener when the server sends location data
+socker.on("receive-location", (data) => {
     const { id, latitude, longitude } = data;
     userLocations[id] = { latitude, longitude };
 
-    // Add or update user markers on the map
-    if (userMarkers[id]) {
-        userMarkers[id].setLatLng([latitude, longitude]);
+    // Create or update the marker for the user
+    if (markers[id]) {
+        markers[id].setLatLng([latitude, longitude]);
     } else {
-        userMarkers[id] = L.marker([latitude, longitude]).addTo(map).bindPopup(`User ${id}`);
+        markers[id] = L.marker([latitude, longitude]).addTo(map);
     }
 
-    // Calculate the midpoint and search for nearby places
+    // If two users exist, draw a line between them
     const userIds = Object.keys(userLocations);
     if (userIds.length === 2) {
-        const [user1, user2] = userIds.map(id => userLocations[id]);
-        const midpoint = {
-            latitude: (user1.latitude + user2.latitude) / 2,
-            longitude: (user1.longitude + user2.longitude) / 2
-        };
+        const user1 = userLocations[userIds[0]];
+        const user2 = userLocations[userIds[1]];
 
-        // Draw a line between the two users
-        if (routePolyline) {
-            routePolyline.setLatLngs([
-                [user1.latitude, user1.longitude],
-                [user2.latitude, user2.longitude]
-            ]);
-        } else {
-            routePolyline = L.polyline([
-                [user1.latitude, user1.longitude],
-                [user2.latitude, user2.longitude]
-            ], { color: "black" }).addTo(map);
+        // Remove previous route if it exists
+        if (routeControl) {
+            map.removeControl(routeControl);
         }
 
-        // Find nearby places at the midpoint
-        findNearbyPlaces(midpoint.latitude, midpoint.longitude);
+        // Ensure the map is fully initialized before adding the routing control
+        if (map.getZoom() !== null) {
+            // Calculate and display the route between the two users
+            routeControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(user1.latitude, user1.longitude),
+                    L.latLng(user2.latitude, user2.longitude)
+                ],
+                routeWhileDragging: true, // Allow dragging to update route
+                lineOptions: {
+                    styles: [{ color: 'black', weight: 4 }]
+                }
+            }).addTo(map);
+        }
     }
 });
 
-// Search for nearby places using Nominatim
-function findNearbyPlaces(lat, lon) {
-    const query = "cafe|restaurant|park|garden"; // Search categories
-    const url = `https://nominatim.openstreetmap.org/search?format=json&lat=${lat}&lon=${lon}&radius=2000&q=${query}`;
-
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            // Clear existing markers for places
-            if (window.placeMarkers) {
-                window.placeMarkers.forEach(marker => map.removeLayer(marker));
-            }
-            window.placeMarkers = [];
-
-            // Add markers for nearby places
-            data.forEach(place => {
-                const marker = L.marker([place.lat, place.lon]).addTo(map)
-                    .bindPopup(`<b>${place.display_name}</b>`);
-                window.placeMarkers.push(marker);
-            });
-
-            // Zoom to the midpoint to show nearby places
-            map.setView([lat, lon], 14);
-        })
-        .catch(error => console.error("Error fetching nearby places:", error));
-}
-
-socket.on("user-disconnected", (id) => {
-    if (userMarkers[id]) {
-        map.removeLayer(userMarkers[id]);
-        delete userMarkers[id];
+// Handle user disconnections
+socker.on("user-disconnected", (id) => {
+    if (markers[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
     }
-    if (Object.keys(userLocations).length < 2 && routePolyline) {
-        map.removeLayer(routePolyline);
-        routePolyline = null;
+
+    // Recalculate the route if one user disconnects
+    const userIds = Object.keys(userLocations);
+    if (userIds.length === 2) {
+        const user1 = userLocations[userIds[0]];
+        const user2 = userLocations[userIds[1]];
+
+        if (routeControl) {
+            map.removeControl(routeControl);
+        }
+
+        routeControl = L.Routing.control({
+            waypoints: [
+                L.latLng(user1.latitude, user1.longitude),
+                L.latLng(user2.latitude, user2.longitude)
+            ],
+            routeWhileDragging: true,
+            lineOptions: { styles: [{ color: 'black', weight: 4 }] }
+        }).addTo(map);
     }
 });
