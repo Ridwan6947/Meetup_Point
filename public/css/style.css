@@ -14,3 +14,13 @@ html,body{
     height: 100%;
     width: 100%;
 }
+.meeting-point {
+    color: #e74c3c;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px white;
+}
+
+.poi-marker {
+    font-size: 20px;
+    text-align: center;
+}
