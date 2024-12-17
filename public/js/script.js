@@ -6,7 +6,6 @@ let routeControl = null;
 // Add these constants at the top
 const SEARCH_RADIUS = 2000; // 2km in meters
 let midpointMarker = null;
-let connectionLine = null;
 let poiMarkers = [];
 
 // Initialize map with default Bhopal coordinates
@@ -67,20 +66,37 @@ socker.on("receive-location", ({ id, latitude, longitude }) => {
             }).addTo(map);
         }
 
-        // Update or create connection line
-        const coordinates = [
-            [user1.latitude, user1.longitude],
-            [user2.latitude, user2.longitude]
+        // Update or create route
+        const waypoints = [
+            L.latLng(user1.latitude, user1.longitude),
+            L.latLng(user2.latitude, user2.longitude)
         ];
-        
-        if (connectionLine) {
-            connectionLine.setLatLngs(coordinates);
+
+        if (routeControl) {
+            routeControl.setWaypoints(waypoints);
         } else {
-            connectionLine = L.polyline(coordinates, {
-                color: 'blue',
-                weight: 3,
-                dashArray: '5, 10'
+            routeControl = L.Routing.control({
+                waypoints: waypoints,
+                routeWhileDragging: true,
+                showAlternatives: true,
+                altLineOptions: {
+                    styles: [
+                        {color: 'black', opacity: 0.15, weight: 9},
+                        {color: 'white', opacity: 0.8, weight: 6},
+                        {color: 'blue', opacity: 0.5, weight: 2}
+                    ]
+                },
+                lineOptions: {
+                    styles: [
+                        {color: 'black', opacity: 0.15, weight: 9},
+                        {color: 'white', opacity: 0.8, weight: 6},
+                        {color: 'blue', opacity: 0.5, weight: 2}
+                    ]
+                }
             }).addTo(map);
+
+            // Hide the routing instructions
+            routeControl.hide();
         }
 
         // Search for POIs using Overpass API
@@ -150,20 +166,14 @@ socker.on("user-disconnected", (id) => {
     }
 
     // Clean up route if less than 2 users
-    if (userLocations.size < 2 && routeControl) {
-        map.removeControl(routeControl);
-        routeControl = null;
-    }
-
-    // Clean up additional elements if less than 2 users
     if (userLocations.size < 2) {
+        if (routeControl) {
+            map.removeControl(routeControl);
+            routeControl = null;
+        }
         if (midpointMarker) {
             midpointMarker.remove();
             midpointMarker = null;
-        }
-        if (connectionLine) {
-            connectionLine.remove();
-            connectionLine = null;
         }
         poiMarkers.forEach(marker => marker.remove());
         poiMarkers = [];
